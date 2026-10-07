@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0a0e13" />
+    <title>Dealers SOC — Command Center</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/_config.js"></script>
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#dashboard" aria-label="Dealers SOC dashboard">
+          <span class="brand-mark">D</span><span>DEALERS<span class="brand-muted"> / SOC</span></span>
+        </a>
+        <div class="workspace-label">WORKSPACE</div>
+        <nav class="main-nav" aria-label="Main navigation">
+          <button class="nav-item active" data-view="dashboard"><span class="nav-icon">◫</span>Overview</button>
+          <button class="nav-item" data-view="incidents"><span class="nav-icon">⌁</span>Incidents</button>
+          <button class="nav-item" data-view="alerts"><span class="nav-icon">⌑</span>Alert stream</button>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="api-status"><span class="status-dot" id="api-dot"></span><div><b id="api-state">Connecting</b><small id="api-address">localhost:8000</small></div></div>
+          <div class="identity-note">DEMO IDENTITY · HEADER BASED<br />This is not production authentication.</div>
+        </div>
+      </aside>
+      <main class="main-area">
+        <header class="topbar">
+          <div class="breadcrumbs"><span>DEALERS SOC</span><i>/</i><b id="crumb-current">OVERVIEW</b></div>
+          <div class="top-actions">
+            <div class="live-indicator" id="stream-status"><span></span>Connecting live feed</div>
+            <button class="icon-button" id="refresh-btn" title="Refresh data" aria-label="Refresh data">↻</button>
+            <div class="identity-control"><label for="role-select">ROLE</label><select id="role-select" aria-label="Demo role"></select></div>
+            <div class="avatar" id="user-avatar">A</div>
+          </div>
+        </header>
+        <div id="notice" class="notice hidden" role="status"></div>
+        <section id="view" class="view" aria-live="polite"><div class="loading-state"><span class="spinner"></span>Connecting to SOC backend…</div></section>
+        <footer class="footer"><span>DEALERS AI SOC · COMMAND CENTER</span><span id="server-time">API data is the source of truth</span></footer>
+      </main>
+    </div>
+    <div class="toast-region" id="toasts" aria-live="polite"></div>
+    <dialog id="confirm-dialog" class="confirm-dialog"><form method="dialog"><div class="dialog-mark">!</div><div class="eyebrow">CONFIRM ACTION</div><h2 id="confirm-title">Confirm action</h2><p id="confirm-copy"></p><div class="dialog-actions"><button class="button button-quiet" value="cancel">Cancel</button><button class="button button-danger" id="confirm-ok" value="confirm">Confirm action</button></div></form></dialog>
+  </body>
+</html>
