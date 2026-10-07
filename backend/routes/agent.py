@@ -23,18 +23,20 @@ router = APIRouter(prefix="/agent", tags=["Autonomous AI SOC Agent"])
 @router.post("/investigate/{incident_id}", response_model=AgentInvestigationResponse)
 async def investigate_incident(
     incident_id: str,
+    dry_run: bool = Query(True, description="When true, runs investigation and stages containment without applying changes"),
     db: Session = Depends(get_db)
 ):
     """
     Triggers autonomous AI SOC Agent investigation for a specific incident:
-    - Reads multi-source evidence via read-only tools
+    - Reads multi-source evidence via read-only tools and remote DFIR diagnostics
     - Generates deep structured forensic analysis
     - Evaluates deterministic autonomy policy (AUTO_RESOLVE / REVIEW_NEEDED / HUMAN_REQUIRED)
+    - Stages allowlisted remediation commands behind RBAC gates
     - Records immutable audit trail in DB
     """
     orchestrator = SOCAgentOrchestrator(db)
     try:
-        response = await orchestrator.investigate_incident(incident_id)
+        response = await orchestrator.investigate_incident(incident_id, dry_run=dry_run)
         return response
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

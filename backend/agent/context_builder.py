@@ -66,6 +66,65 @@ class AgentContextBuilder:
         tools_called.append("get_process_tree")
         raw_evidence["process_tree"] = process_tree
 
+        # 10. Remote SSH Live DFIR Diagnostics (Graduated Forensics)
+        primary_host = inc["impacted_hosts"][0] if inc.get("impacted_hosts") else None
+        forensic_trace = []
+        ssh_telemetry_lines = []
+
+        if primary_host:
+            # Forensic Step 1: Process Hierarchy
+            ptree_res = self.tools.execute_ssh_forensics(primary_host, "collect_process_tree")
+            tools_called.append("ssh:collect_process_tree")
+            forensic_trace.append({
+                "step": 1,
+                "tool": "collect_process_tree",
+                "host": primary_host,
+                "status": ptree_res.get("status"),
+                "summary": "Collected active process hierarchy and parent-child lineages"
+            })
+            if ptree_res.get("stdout"):
+                ssh_telemetry_lines.append(f"--- [Host {primary_host}: Active Process Tree] ---\n{ptree_res['stdout'][:250]}...")
+
+            # Forensic Step 2: Active Network Sockets & C2 Connections
+            sock_res = self.tools.execute_ssh_forensics(primary_host, "collect_network_sockets")
+            tools_called.append("ssh:collect_network_sockets")
+            forensic_trace.append({
+                "step": 2,
+                "tool": "collect_network_sockets",
+                "host": primary_host,
+                "status": sock_res.get("status"),
+                "summary": "Scanned listening ports and outbound socket connections"
+            })
+            if sock_res.get("stdout"):
+                ssh_telemetry_lines.append(f"--- [Host {primary_host}: Active Sockets & Sinks] ---\n{sock_res['stdout'][:250]}...")
+
+            # Forensic Step 3: Auth & Security Logs
+            auth_res = self.tools.execute_ssh_forensics(primary_host, "collect_auth_logs")
+            tools_called.append("ssh:collect_auth_logs")
+            forensic_trace.append({
+                "step": 3,
+                "tool": "collect_auth_logs",
+                "host": primary_host,
+                "status": auth_res.get("status"),
+                "summary": "Inspected recent authentication and sudo execution logs"
+            })
+            if auth_res.get("stdout"):
+                ssh_telemetry_lines.append(f"--- [Host {primary_host}: Authentication Log Snippet] ---\n{auth_res['stdout'][:250]}...")
+
+            # Forensic Step 4: Cryptographic File Hash
+            hash_res = self.tools.execute_ssh_forensics(primary_host, "inspect_file_hash")
+            tools_called.append("ssh:inspect_file_hash")
+            forensic_trace.append({
+                "step": 4,
+                "tool": "inspect_file_hash",
+                "host": primary_host,
+                "status": hash_res.get("status"),
+                "summary": "Generated SHA-256 hash for suspicious executable payload"
+            })
+
+        raw_evidence["forensic_playbook_trace"] = forensic_trace
+        ssh_telemetry_str = "\n".join(ssh_telemetry_lines) if ssh_telemetry_lines else "No live host telemetry collected."
+
         # Build formatted prompt text blocks
         timeline_lines = []
         for idx, t in enumerate(timeline[:20], 1):
@@ -106,6 +165,7 @@ class AgentContextBuilder:
             "assets_text": assets_str,
             "mitre_text": mitre_str,
             "memory_text": memory_str,
+            "ssh_telemetry_text": ssh_telemetry_str,
             "process_tree_count": proc_count,
             "has_tier_0": assets.get("contains_tier_0", False),
             "related_incidents_count": len(related),
@@ -113,4 +173,5 @@ class AgentContextBuilder:
         }
 
         return context_dict, tools_called, raw_evidence
+
 

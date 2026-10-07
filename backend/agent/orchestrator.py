@@ -37,15 +37,19 @@ class SOCAgentOrchestrator:
         self.ollama_url = settings.OLLAMA_BASE_URL.rstrip("/")
         self.model = settings.OLLAMA_MODEL
 
-    async def investigate_incident(self, incident_id: str) -> AgentInvestigationResponse:
+    async def investigate_incident(
+        self,
+        incident_id: str,
+        dry_run: bool = True
+    ) -> AgentInvestigationResponse:
         """
-        End-to-end investigation pipeline:
-        1. Gathers evidence via safe read-only tools
-        2. Builds context
+        End-to-end graduated autonomy investigation pipeline:
+        1. Gathers evidence via safe read-only tools and remote live DFIR probes
+        2. Builds unified forensic context
         3. Generates structured analysis via LLM (or Embedded Cyber AI engine)
         4. Runs deterministic autonomy policy engine
-        5. Saves audit log
-        6. Updates incident state
+        5. Stages allowlisted remediation commands behind RBAC / human approval wall
+        6. Saves audit log and updates incident state
         """
         # Step 1: Context & Tool Evidence Gathering
         context, tools_called, raw_evidence = self.context_builder.build_investigation_context(incident_id)
@@ -65,9 +69,59 @@ class SOCAgentOrchestrator:
         autonomy_tier = policy_decision["tier"]
         policy_reason = policy_decision["reason"]
 
-        # Step 4: Record Audit Trail in Database
+        # Step 4: Stage Allowlisted Remediation Commands (Guarded by RBAC)
+        staged_commands = []
+        for action in structured_analysis.recommended_actions:
+            if action.action_type == "isolate_host":
+                staged_commands.append({
+                    "action_type": action.action_type,
+                    "target": action.target,
+                    "ssh_command_type": "isolate_host_firewall",
+                    "command_template": "iptables -F && iptables -A INPUT -p tcp --dport 22 -j ACCEPT && iptables -P INPUT DROP",
+                    "required_role": "SOC_LEAD_ADMIN",
+                    "required_permission": "ssh:remediation",
+                    "status": "STAGED_AWAITING_APPROVAL" if autonomy_tier == AutonomyTier.HUMAN_REQUIRED else "STAGED_READY",
+                    "human_approval_required": autonomy_tier == AutonomyTier.HUMAN_REQUIRED
+                })
+            elif action.action_type == "kill_process":
+                staged_commands.append({
+                    "action_type": action.action_type,
+                    "target": action.target,
+                    "ssh_command_type": "kill_process",
+                    "command_template": "kill -9 <PID>",
+                    "required_role": "SOC_LEAD_ADMIN",
+                    "required_permission": "ssh:remediation",
+                    "status": "STAGED_AWAITING_APPROVAL" if autonomy_tier == AutonomyTier.HUMAN_REQUIRED else "STAGED_READY",
+                    "human_approval_required": autonomy_tier == AutonomyTier.HUMAN_REQUIRED
+                })
+            elif action.action_type == "block_ip":
+                staged_commands.append({
+                    "action_type": action.action_type,
+                    "target": action.target,
+                    "ssh_command_type": "block_remote_ip",
+                    "command_template": f"iptables -I INPUT 1 -s '{action.target}' -j DROP",
+                    "required_role": "SOC_LEAD_ADMIN",
+                    "required_permission": "ssh:remediation",
+                    "status": "STAGED_AWAITING_APPROVAL" if autonomy_tier == AutonomyTier.HUMAN_REQUIRED else "STAGED_READY",
+                    "human_approval_required": autonomy_tier == AutonomyTier.HUMAN_REQUIRED
+                })
+            elif action.action_type == "revoke_token":
+                staged_commands.append({
+                    "action_type": action.action_type,
+                    "target": action.target,
+                    "ssh_command_type": "revoke_identity_tokens",
+                    "command_template": f"Revoke-AzureADUserAllRefreshToken -UserId '{action.target}'",
+                    "required_role": "SENIOR_ANALYST",
+                    "required_permission": "containment:execute",
+                    "status": "STAGED_AWAITING_APPROVAL" if autonomy_tier == AutonomyTier.HUMAN_REQUIRED else "STAGED_READY",
+                    "human_approval_required": autonomy_tier == AutonomyTier.HUMAN_REQUIRED
+                })
+
+        # Step 5: Record Audit Trail in Database
         now_dt = datetime.now(timezone.utc)
         run_id = f"RUN-{now_dt.strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6]}"
+        forensic_trace = raw_evidence.get("forensic_playbook_trace", [])
+
         run_record = AgentInvestigationRun(
             id=run_id,
             incident_id=incident_id,
@@ -77,7 +131,9 @@ class SOCAgentOrchestrator:
                 "hosts": raw_evidence.get("incident", {}).get("impacted_hosts", []),
                 "users": raw_evidence.get("incident", {}).get("impacted_users", []),
                 "ips": raw_evidence.get("incident", {}).get("impacted_ips", []),
-                "timeline_events": len(raw_evidence.get("timeline", []))
+                "timeline_events": len(raw_evidence.get("timeline", [])),
+                "forensic_playbook_steps": len(forensic_trace),
+                "dry_run": dry_run
             },
             structured_result=structured_analysis.model_dump(),
             confidence_score=structured_analysis.confidence_score,
@@ -88,7 +144,7 @@ class SOCAgentOrchestrator:
         )
         self.db.add(run_record)
 
-        # Step 5: Update Incident Record with AI outputs
+        # Step 6: Update Incident Record with AI outputs
         inc_obj = self.db.query(Incident).filter(Incident.id == incident_id).first()
         if inc_obj:
             inc_obj.summary_ai = structured_analysis.executive_summary
@@ -98,28 +154,32 @@ class SOCAgentOrchestrator:
             inc_obj.ai_model_used = model_used
             inc_obj.containment_recommendations = [a.model_dump() for a in structured_analysis.recommended_actions]
             
-            # If auto-resolved by deterministic policy
-            if autonomy_tier == AutonomyTier.AUTO_RESOLVE:
+            # If auto-resolved by deterministic policy and not in dry_run mode
+            if autonomy_tier == AutonomyTier.AUTO_RESOLVE and not dry_run:
                 inc_obj.status = "Closed - Auto Resolved"
 
             inc_obj.updated_at = now_dt
 
         self.db.commit()
 
-        # Step 6: Return structured response
+        # Step 7: Return structured response
         return AgentInvestigationResponse(
             run_id=run_id,
             incident_id=incident_id,
             autonomy_tier=autonomy_tier.value if hasattr(autonomy_tier, "value") else str(autonomy_tier),
             policy_reason=policy_reason,
             model_used=model_used,
+            dry_run=dry_run,
             tools_called=tools_called,
             analysis=structured_analysis,
+            forensic_playbook_trace=forensic_trace,
+            staged_remediation_commands=staged_commands,
             evidence_summary={
                 "alert_count": raw_evidence.get("alert_count", 0),
                 "hosts_evaluated": raw_evidence.get("incident", {}).get("impacted_hosts", []),
                 "users_evaluated": raw_evidence.get("incident", {}).get("impacted_users", []),
-                "timeline_events_analyzed": len(raw_evidence.get("timeline", []))
+                "timeline_events_analyzed": len(raw_evidence.get("timeline", [])),
+                "forensic_playbook_steps": len(forensic_trace)
             },
             created_at=run_record.created_at
         )

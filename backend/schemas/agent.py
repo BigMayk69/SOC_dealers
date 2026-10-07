@@ -34,9 +34,12 @@ class AgentInvestigationResponse(BaseModel):
     autonomy_tier: str # AUTO_RESOLVE | REVIEW_NEEDED | HUMAN_REQUIRED
     policy_reason: str
     model_used: str
+    dry_run: bool = True
     tools_called: List[str]
     analysis: StructuredInvestigationResult
     evidence_summary: Dict[str, Any]
+    forensic_playbook_trace: List[Dict[str, Any]] = Field(default_factory=list)
+    staged_remediation_commands: List[Dict[str, Any]] = Field(default_factory=list)
     created_at: datetime
 
 class AnalystFeedbackCreate(BaseModel):

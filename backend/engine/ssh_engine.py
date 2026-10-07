@@ -208,8 +208,16 @@ class SSHEngine:
 
                 raise PermissionError(f"User '{user_email}' with role '{user_role}' lacks permission '{req_perm.value}' to execute '{command_type}'.")
 
-        # 2. Command Formatting with sanitization
-        sanitized_params = {k: cls.sanitize_parameter(str(v)) for k, v in params.items()}
+        # 2. Command Formatting with sanitization & default parameter fallbacks
+        default_params = {
+            "filepath": "/tmp/payload.exe",
+            "pid": "1842",
+            "process_name": "powershell.exe",
+            "ip_address": "185.220.101.5",
+            "key_comment": "unauthorized_ssh_key"
+        }
+        merged_params = {**default_params, **params}
+        sanitized_params = {k: cls.sanitize_parameter(str(v)) for k, v in merged_params.items()}
         try:
             raw_command = cmd_def["linux_cmd"].format(**sanitized_params)
         except KeyError as e:

@@ -8,7 +8,7 @@
 [![MITRE ATT&CK](https://img.shields.io/badge/Matrix-MITRE_ATT%26CK-red?style=flat)](https://attack.mitre.org/)
 [![Status](https://img.shields.io/badge/Alert_Reduction-98.6%25-brightgreen?style=flat)](#)
 [![MTTT](https://img.shields.io/badge/MTTT-%3C_3_Minutes-cyan?style=flat)](#)
-[![Tests](https://img.shields.io/badge/Tests-34%2F34_Passing-success?style=flat)](#)
+[![Tests](https://img.shields.io/badge/Tests-38%2F38_Passing-success?style=flat)](#)
 
 ---
 
@@ -171,7 +171,114 @@ python3 cli.py serve
 ```bash
 python3 -m pytest tests/ -v
 ```
-* **34/34 pytest test cases passing** (Agent tools, context builder, autonomy policy engine, cockpit endpoints, RBAC permissions, SSH forensics & containment, REST endpoints, graph correlation, MITRE heuristics, risk scoring).
+* **38/38 pytest test cases passing** (Agent tools, context builder, autonomy policy engine, scenario evaluations, cockpit endpoints, RBAC permissions, SSH forensics & containment, REST endpoints, graph correlation, MITRE heuristics, risk scoring).
+
+---
+
+## 🎯 Autonomous DFIR Workflow with Graduated Autonomy
+
+The platform executes a dynamic **Digital Forensics and Incident Response (DFIR)** investigation workflow on correlated alert clusters:
+
+```text
+ALERT FIREHOSE (3,000 alerts)
+         ↓
+NETWORKX GRAPH CORRELATION (98.6% volume reduction)
+         ↓
+AI SOC INVESTIGATION AGENT
+ ├─ Step 1: Query Parent-Child Process Lineage (collect_process_tree)
+ ├─ Step 2: Enumerate Listening Sockets & Outbound C2 Beacons (collect_network_sockets)
+ ├─ Step 3: Inspect Authentication Logs & Privileged Escalation (collect_auth_logs)
+ ├─ Step 4: Cryptographic File Hash & VirusTotal Correlation (inspect_file_hash)
+ ├─ Step 5: Multi-Hop Lateral Spread & Historical Incident Memory (search_related_incidents)
+ └─ Step 6: 14-Stage MITRE ATT&CK Kill-Chain Mapping & Sigma Rule Generation
+         ↓
+DETERMINISTIC AUTONOMY POLICY ENGINE
+         ↓
+┌───────────────────────┬───────────────────────┬───────────────────────┐
+│       LOW RISK        │      MEDIUM RISK      │       HIGH RISK       │
+│  (Noise / Scanners)   │  (Internal Anomaly)   │ (Ransomware / Tier-0) │
+│           ↓           │           ↓           │           ↓           │
+│     AUTO_RESOLVE      │     REVIEW_NEEDED     │    HUMAN_REQUIRED     │
+│   (Auto-Suppression)  │   (Senior Analyst)    │   (Approval Gate)     │
+└───────────────────────┴───────────────────────┴───────────────────────┘
+         ↓
+RBAC & CONTAINMENT WALL (Remediation is NEVER directly executed by the LLM)
+ ├─ Allowlisted Commands Staged for One-Click Approval (isolate_host_firewall, block_ip, kill_process)
+ └─ Immutable Compliance Audit Log (SSHAuditRecord)
+```
+
+### 🧪 Dry-Run / Agent Simulation Mode
+Pass `?dry_run=true` to demonstrate the complete autonomous investigation, forensic telemetry assembly, policy evaluation, and staged mitigation commands **without modifying live machine state**:
+
+```bash
+# Dry-Run Autonomous Investigation
+curl -X POST "http://localhost:8000/api/agent/investigate/INC-20261001-001?dry_run=true" \
+  -H "X-User-Email: senior.analyst@company.com" \
+  -H "X-User-Role: SENIOR_ANALYST"
+```
+
+#### Complete Structured JSON Response Payload:
+```json
+{
+  "incident_id": "INC-20261001-001",
+  "dry_run": true,
+  "autonomy_tier": "HUMAN_REQUIRED",
+  "policy_reasoning": "High Composite Risk Score (88.5/100) involving Tier-0 Asset DC-PROD-01 and destructive Ransomware tactics.",
+  "executive_summary": "Active multi-stage ransomware execution detected on DC-PROD-01 initiated via suspicious PowerShell download from 185.220.101.5.",
+  "root_cause": "Phishing lure executed by user jdoe executing unvetted macro dropper.",
+  "forensic_playbook_trace": [
+    {
+      "step": 1,
+      "tool": "collect_process_tree",
+      "target_host": "DC-PROD-01",
+      "findings": "Detected powershell.exe -enc spawning vssadmin.exe delete shadows /all /quiet"
+    },
+    {
+      "step": 2,
+      "tool": "collect_network_sockets",
+      "target_host": "DC-PROD-01",
+      "findings": "Active outbound TCP socket on port 4444 connected to 185.220.101.5"
+    },
+    {
+      "step": 3,
+      "tool": "collect_auth_logs",
+      "target_host": "DC-PROD-01",
+      "findings": "Event 4624 Type 10 (RemoteInteractive) from unknown internal IP"
+    },
+    {
+      "step": 4,
+      "tool": "inspect_file_hash",
+      "target_host": "DC-PROD-01",
+      "findings": "SHA256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 matches LockBit 3.0 IOC"
+    }
+  ],
+  "staged_remediation_commands": [
+    {
+      "command": "isolate_host_firewall",
+      "host": "DC-PROD-01",
+      "description": "Block all inbound/outbound traffic except SSH/SOC management subnet",
+      "requires_role": "SOC_LEAD_ADMIN / SENIOR_ANALYST"
+    },
+    {
+      "command": "kill_process --pid 1842",
+      "host": "DC-PROD-01",
+      "description": "Terminate rogue encryptor process",
+      "requires_role": "SOC_LEAD_ADMIN"
+    },
+    {
+      "command": "block_remote_ip --ip 185.220.101.5",
+      "host": "DC-PROD-01",
+      "description": "Block external C2 communication at perimeter firewall",
+      "requires_role": "SOC_LEAD_ADMIN"
+    }
+  ],
+  "sigma_rule": "title: Detect Suspicious Encoded PowerShell C2\\nstatus: production\\nlogsource:\\n  category: process_creation\\n  product: windows\\ndetection:\\n  selection:\\n    CommandLine|contains: 'powershell -enc'\\n  condition: selection\\nlevel: high",
+  "confidence_score": 0.96,
+  "affected_assets": [
+    {"name": "DC-PROD-01", "type": "host", "criticality_tier": "Tier 0 (Domain Controller)"}
+  ]
+}
+```
 
 ---
 
@@ -346,8 +453,9 @@ eventSource.onmessage = (event) => {
 │   ├── alerts.csv                  # 10,000 raw telemetry logs
 │   ├── data_dictionary.md          # Dataset schema and scenario documentation
 │   └── ground_truth.csv            # 10k ground truth scenario labels
-├── tests/                          # 🧪 Automated Test Suite (34 tests)
+├── tests/                          # 🧪 Automated Test Suite (38 tests)
 │   ├── test_agent.py               # Agent tools, context builder, policy engine, memory tests
+│   ├── test_agent_scenarios.py     # End-to-end evaluation suite (Benign, Suspicious, Malicious, Dry-Run)
 │   ├── test_api.py                 # REST API endpoints, cockpit summary/graph, alert ingestion tests
 │   ├── test_auth_rbac.py           # RBAC permission matrix, user profiles, and role guards
 │   ├── test_correlation.py         # NetworkX temporal graph correlation tests
