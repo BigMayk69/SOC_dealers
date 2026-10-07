@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  soc-app:
+    build: .
+    container_name: dealers_soc_cockpit
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://dealers:dealers_soc_pwd@postgres:5432/soc_triage_db
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=llama3
+      - CORRELATION_WINDOW_MINUTES=60
+    depends_on:
+      - postgres
+      - ollama
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: dealers_soc_postgres
+    environment:
+      - POSTGRES_USER=dealers
+      - POSTGRES_PASSWORD=dealers_soc_pwd
+      - POSTGRES_DB=soc_triage_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: dealers_soc_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  ollama_models:
